@@ -18,12 +18,12 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-      apiKey: "PASTE_YOUR_API_KEY_HERE",
-      authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
-      projectId: "PASTE_YOUR_PROJECT_ID_HERE",
-      storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
-      messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
-      appId: "PASTE_YOUR_APP_ID_HERE"
+     apiKey: "AIzaSyAP8FxxZYriZVtCtaKHc9t029FMwx9zPm8",
+  authDomain: "wedding-list-29bec.firebaseapp.com",
+  projectId: "wedding-list-29bec",
+  storageBucket: "wedding-list-29bec.firebasestorage.app",
+  messagingSenderId: "290653372044",
+  appId: "1:290653372044:web:eddda14b3bce72515c05a9"
     };
 
 const app = initializeApp(firebaseConfig);
