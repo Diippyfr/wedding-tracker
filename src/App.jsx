@@ -8,7 +8,10 @@ import {
   Trash2, 
   Search,
   Loader2,
-  MapPin
+  MapPin,
+  Edit2,
+  Save,
+  X
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
@@ -18,7 +21,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-     apiKey: "AIzaSyAP8FxxZYriZVtCtaKHc9t029FMwx9zPm8",
+      apiKey: "AIzaSyAP8FxxZYriZVtCtaKHc9t029FMwx9zPm8",
   authDomain: "wedding-list-29bec.firebaseapp.com",
   projectId: "wedding-list-29bec",
   storageBucket: "wedding-list-29bec.firebasestorage.app",
@@ -49,6 +52,10 @@ export default function App() {
   const [newPlusOne, setNewPlusOne] = useState(false);
   const [newAddress, setNewAddress] = useState(''); // <-- NEW STATE FOR ADDRESS
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Edit mode state
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', address: '', category: CATEGORIES[0] });
 
   useEffect(() => {
     const initAuth = async () => {
@@ -108,6 +115,8 @@ export default function App() {
         category: newCategory,
         plusOne: newPlusOne,
         address: newAddress.trim(), // <-- SAVE ADDRESS TO DATABASE
+        saveTheDateSent: false,
+        inviteSent: false,
         rsvpStatus: 'Pending',
         createdAt: Date.now()
       });
@@ -145,6 +154,43 @@ export default function App() {
       });
     } catch (error) {
       console.error("Error updating RSVP:", error);
+    }
+  };
+
+  const handleToggleMail = async (id, field, currentValue) => {
+    try {
+      await updateDoc(doc(db, GUESTS_COLLECTION, id), {
+        [field]: !currentValue
+      });
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+    }
+  };
+
+  const startEditing = (guest) => {
+    setEditingId(guest.id);
+    setEditForm({ 
+      name: guest.name, 
+      address: guest.address || '', 
+      category: guest.category 
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+  };
+
+  const saveEdit = async (id) => {
+    if (!editForm.name.trim()) return;
+    try {
+      await updateDoc(doc(db, GUESTS_COLLECTION, id), {
+        name: editForm.name.trim(),
+        address: editForm.address.trim(),
+        category: editForm.category
+      });
+      setEditingId(null);
+    } catch (error) {
+      console.error("Error saving edit:", error);
     }
   };
 
@@ -349,71 +395,131 @@ export default function App() {
                 
                 <div className="divide-y divide-stone-100">
                   {categoryGuests.map(guest => (
-                    <div key={guest.id} className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-stone-50/50 transition-colors">
-                      
-                      {/* Name, Address, and Plus One Status */}
-                      <div className="flex-1 w-full sm:w-auto">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <p className="font-medium text-stone-900 text-lg break-words">{guest.name}</p>
-                          {guest.plusOne && (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium bg-rose-50 text-rose-600 px-2 py-1 rounded-md border border-rose-100 whitespace-nowrap">
-                              <UserPlus size={12} /> +1 Included
-                            </span>
-                          )}
-                        </div>
-                        {/* NEW: DISPLAY ADDRESS */}
-                        {guest.address && (
-                          <div className="flex items-start gap-1.5 mt-1.5 text-stone-500">
-                            <MapPin size={14} className="mt-0.5 shrink-0 text-stone-400" />
-                            <p className="text-sm whitespace-pre-wrap leading-tight">{guest.address}</p>
+                    <div key={guest.id} className="p-4 sm:p-6 hover:bg-stone-50/50 transition-colors">
+                      {editingId === guest.id ? (
+                        <div className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+                          <div className="flex flex-col md:flex-row gap-3">
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-stone-500 mb-1">Name</label>
+                              <input value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-200" />
+                            </div>
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-stone-500 mb-1">Address</label>
+                              <input value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-200" placeholder="Address..." />
+                            </div>
+                            <div className="w-full md:w-48">
+                              <label className="block text-xs font-medium text-stone-500 mb-1">Category</label>
+                              <select value={editForm.category} onChange={(e) => setEditForm({...editForm, category: e.target.value})} className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-200">
+                                {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                              </select>
+                            </div>
                           </div>
-                        )}
-                      </div>
-
-                      {/* Controls */}
-                      <div className="flex flex-wrap items-center justify-between sm:justify-end w-full sm:w-auto gap-3 sm:gap-6 mt-2 sm:mt-0">
-                        
-                        {/* Plus One Toggle */}
-                        <label className="flex items-center gap-2 cursor-pointer bg-white border border-stone-200 px-4 py-2.5 sm:px-3 sm:py-1.5 rounded-lg hover:bg-stone-50 transition-colors flex-1 sm:flex-none justify-center">
-                          <input 
-                            type="checkbox"
-                            checked={guest.plusOne}
-                            onChange={() => handleTogglePlusOne(guest.id, guest.plusOne)}
-                            className="w-5 h-5 sm:w-4 sm:h-4 rounded text-rose-500 border-stone-300 accent-rose-400"
-                          />
-                          <span className="text-sm text-stone-600 font-medium">Plus One</span>
-                        </label>
-
-                        {/* RSVP Dropdown */}
-                        <div className="relative flex-1 sm:flex-none">
-                          <select
-                            value={guest.rsvpStatus}
-                            onChange={(e) => handleUpdateRSVP(guest.id, e.target.value)}
-                            className={`w-full appearance-none pr-8 pl-3 py-2.5 sm:py-1.5 rounded-lg text-sm font-medium border focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors ${
-                              guest.rsvpStatus === 'Attending' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-400' :
-                              guest.rsvpStatus === 'Declined' ? 'bg-rose-50 text-rose-700 border-rose-200 focus:ring-rose-400' :
-                              'bg-amber-50 text-amber-700 border-amber-200 focus:ring-amber-400'
-                            }`}
-                          >
-                            {RSVP_STATUSES.map(status => (
-                              <option key={status} value={status}>{status}</option>
-                            ))}
-                          </select>
-                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 sm:px-2 text-current opacity-50">
-                            <svg className="h-5 w-5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                          <div className="flex justify-end gap-2 mt-2">
+                            <button onClick={cancelEditing} className="px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors flex items-center gap-1"><X size={16}/> Cancel</button>
+                            <button onClick={() => saveEdit(guest.id)} className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors flex items-center gap-1"><Save size={16}/> Save</button>
                           </div>
                         </div>
+                      ) : (
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          
+                          {/* Name, Address, Mail Trackers, and Plus One Status */}
+                          <div className="flex-1 w-full lg:w-auto">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <p className="font-medium text-stone-900 text-lg break-words">{guest.name}</p>
+                              {guest.plusOne && (
+                                <span className="inline-flex items-center gap-1 text-xs font-medium bg-rose-50 text-rose-600 px-2 py-1 rounded-md border border-rose-100 whitespace-nowrap">
+                                  <UserPlus size={12} /> +1 Included
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* DISPLAY ADDRESS */}
+                            {guest.address && (
+                              <div className="flex items-start gap-1.5 mt-1.5 text-stone-500">
+                                <MapPin size={14} className="mt-0.5 shrink-0 text-stone-400" />
+                                <p className="text-sm whitespace-pre-wrap leading-tight">{guest.address}</p>
+                              </div>
+                            )}
 
-                        {/* Delete Button */}
-                        <button 
-                          onClick={() => handleDeleteGuest(guest.id)}
-                          className="text-stone-400 hover:text-rose-500 p-3 sm:p-2 hover:bg-rose-50 rounded-lg transition-colors flex-shrink-0"
-                          title="Remove guest"
-                        >
-                          <Trash2 size={20} className="sm:w-[18px] sm:h-[18px]" />
-                        </button>
-                      </div>
+                            {/* Mail Tracking Checkboxes */}
+                            <div className="flex items-center gap-6 mt-3 pt-3 border-t border-stone-100 lg:border-none lg:pt-0 lg:mt-2">
+                              <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer hover:text-stone-900 transition-colors">
+                                <input 
+                                  type="checkbox" 
+                                  checked={guest.saveTheDateSent || false} 
+                                  onChange={() => handleToggleMail(guest.id, 'saveTheDateSent', guest.saveTheDateSent)}
+                                  className="w-4 h-4 rounded text-rose-500 border-stone-300 focus:ring-rose-400 focus:ring-offset-0 accent-rose-400"
+                                />
+                                Save the Date Sent
+                              </label>
+                              <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer hover:text-stone-900 transition-colors">
+                                <input 
+                                  type="checkbox" 
+                                  checked={guest.inviteSent || false} 
+                                  onChange={() => handleToggleMail(guest.id, 'inviteSent', guest.inviteSent)}
+                                  className="w-4 h-4 rounded text-emerald-500 border-stone-300 focus:ring-emerald-400 focus:ring-offset-0 accent-emerald-500"
+                                />
+                                Invite Sent
+                              </label>
+                            </div>
+                          </div>
 
+                          {/* Controls */}
+                          <div className="flex flex-wrap items-center justify-between lg:justify-end w-full lg:w-auto gap-3 mt-2 lg:mt-0">
+                            
+                            {/* Plus One Toggle */}
+                            <label className="flex items-center gap-2 cursor-pointer bg-white border border-stone-200 px-3 py-1.5 rounded-lg hover:bg-stone-50 transition-colors flex-1 lg:flex-none justify-center">
+                              <input 
+                                type="checkbox"
+                                checked={guest.plusOne}
+                                onChange={() => handleTogglePlusOne(guest.id, guest.plusOne)}
+                                className="w-4 h-4 rounded text-rose-500 border-stone-300 accent-rose-400"
+                              />
+                              <span className="text-sm text-stone-600 font-medium">Plus One</span>
+                            </label>
+
+                            {/* RSVP Dropdown */}
+                            <div className="relative flex-1 lg:flex-none">
+                              <select
+                                value={guest.rsvpStatus}
+                                onChange={(e) => handleUpdateRSVP(guest.id, e.target.value)}
+                                className={`w-full appearance-none pr-8 pl-3 py-1.5 rounded-lg text-sm font-medium border focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors ${
+                                  guest.rsvpStatus === 'Attending' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-400' :
+                                  guest.rsvpStatus === 'Declined' ? 'bg-rose-50 text-rose-700 border-rose-200 focus:ring-rose-400' :
+                                  'bg-amber-50 text-amber-700 border-amber-200 focus:ring-amber-400'
+                                }`}
+                              >
+                                {RSVP_STATUSES.map(status => (
+                                  <option key={status} value={status}>{status}</option>
+                                ))}
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-current opacity-50">
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 lg:border-l lg:border-stone-200 lg:pl-3">
+                              {/* Edit Button */}
+                              <button 
+                                onClick={() => startEditing(guest)}
+                                className="text-stone-400 hover:text-emerald-600 p-2 hover:bg-emerald-50 rounded-lg transition-colors flex-shrink-0"
+                                title="Edit guest"
+                              >
+                                <Edit2 size={18} />
+                              </button>
+
+                              {/* Delete Button */}
+                              <button 
+                                onClick={() => handleDeleteGuest(guest.id)}
+                                className="text-stone-400 hover:text-rose-500 p-2 hover:bg-rose-50 rounded-lg transition-colors flex-shrink-0"
+                                title="Remove guest"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
