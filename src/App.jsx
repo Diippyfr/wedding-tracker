@@ -7,30 +7,29 @@ import {
   XCircle, 
   Trash2, 
   Search,
-  Loader2
+  Loader2,
+  MapPin
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 
 // --- FIREBASE CONFIGURATION ---
-// When you create your Firebase project, paste your keys here:
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-       apiKey: "AIzaSyAP8FxxZYriZVtCtaKHc9t029FMwx9zPm8",
-  authDomain: "wedding-list-29bec.firebaseapp.com",
-  projectId: "wedding-list-29bec",
-  storageBucket: "wedding-list-29bec.firebasestorage.app",
-  messagingSenderId: "290653372044",
-  appId: "1:290653372044:web:eddda14b3bce72515c05a9"
+      apiKey: "PASTE_YOUR_API_KEY_HERE",
+      authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+      projectId: "PASTE_YOUR_PROJECT_ID_HERE",
+      storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
+      messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
+      appId: "PASTE_YOUR_APP_ID_HERE"
     };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// (This ensures the code works both in this preview window and on your own Vercel hosting)
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'allen-wedding';
 const GUESTS_COLLECTION = typeof __firebase_config !== 'undefined' 
   ? `artifacts/${appId}/public/data/guests` 
@@ -43,13 +42,14 @@ export default function App() {
   const [guests, setGuests] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState(null);
   
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
   const [newPlusOne, setNewPlusOne] = useState(false);
+  const [newAddress, setNewAddress] = useState(''); // <-- NEW STATE FOR ADDRESS
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. Authenticate the user anonymously so they can read/write to the database
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -60,6 +60,8 @@ export default function App() {
         }
       } catch (error) {
         console.error("Authentication error:", error);
+        setErrorMessage(error.message);
+        setLoading(false);
       }
     };
     initAuth();
@@ -70,25 +72,24 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Fetch guests from Firebase in real-time
   useEffect(() => {
-    if (!user) return; // Wait until authenticated
+    if (!user) return; 
 
     const guestsRef = collection(db, GUESTS_COLLECTION);
     
-    // onSnapshot listens for real-time updates!
     const unsubscribe = onSnapshot(guestsRef, (snapshot) => {
       const guestData = [];
       snapshot.forEach((doc) => {
         guestData.push({ id: doc.id, ...doc.data() });
       });
       
-      // Sort to keep the list stable (newest at bottom)
       guestData.sort((a, b) => a.createdAt - b.createdAt);
       setGuests(guestData);
       setLoading(false);
+      setErrorMessage(null);
     }, (error) => {
       console.error("Error fetching guests:", error);
+      setErrorMessage(error.message);
       setLoading(false);
     });
 
@@ -106,11 +107,13 @@ export default function App() {
         name: newName.trim(),
         category: newCategory,
         plusOne: newPlusOne,
+        address: newAddress.trim(), // <-- SAVE ADDRESS TO DATABASE
         rsvpStatus: 'Pending',
         createdAt: Date.now()
       });
       setNewName('');
       setNewPlusOne(false);
+      setNewAddress(''); // <-- RESET ADDRESS BOX
     } catch (error) {
       console.error("Error adding guest:", error);
       alert("Failed to add guest. Check console for details.");
@@ -195,13 +198,28 @@ export default function App() {
     );
   }
 
+  if (errorMessage) {
+    return (
+      <div className="min-h-screen bg-[#faf9f7] flex flex-col items-center justify-center text-stone-500 p-8 text-center">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-rose-200 max-w-md">
+          <XCircle className="w-12 h-12 text-rose-500 mx-auto mb-4" />
+          <h2 className="text-xl font-serif text-stone-800 mb-2">Connection Error</h2>
+          <p className="text-rose-600 font-mono text-sm mb-4">{errorMessage}</p>
+          <p className="text-sm text-stone-600">
+            Check your Firebase Console to make sure <b>Anonymous Sign-in</b> is enabled and your <b>Firestore Database</b> is created!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#faf9f7] text-stone-800 font-sans pb-12">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-stone-200 pt-12 pb-8 px-4 text-center">
         <h1 className="text-4xl md:text-5xl font-serif text-stone-900 mb-2">Allen Wedding</h1>
         <p className="text-stone-500 max-w-lg mx-auto">
-          Manage your invitations, plus ones, and RSVPs in one place.
+          Manage your invitations, plus ones, addresses, and RSVPs in one place.
         </p>
       </header>
 
@@ -236,48 +254,65 @@ export default function App() {
             <UserPlus size={20} className="text-stone-400" />
             Add New Guest
           </h2>
-          <form onSubmit={handleAddGuest} className="flex flex-col md:flex-row gap-4 items-start md:items-end">
-            <div className="flex-1 w-full">
-              <label className="block text-sm font-medium text-stone-500 mb-1">Guest Name</label>
-              <input 
-                type="text" 
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g., Jane Doe"
-                className="w-full px-4 py-3 md:py-2 bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 transition-colors"
-                required
-              />
-            </div>
-            <div className="w-full md:w-48">
-              <label className="block text-sm font-medium text-stone-500 mb-1">Category</label>
-              <select 
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                className="w-full px-4 py-3 md:py-2 bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 transition-colors"
-              >
-                {CATEGORIES.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-            <div className="w-full md:w-auto flex items-center h-[48px] md:h-[42px] px-2">
-              <label className="flex items-center gap-3 cursor-pointer select-none">
+          <form onSubmit={handleAddGuest} className="flex flex-col gap-4">
+            {/* Top Row: Name, Category, Plus One */}
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+              <div className="flex-1 w-full">
+                <label className="block text-sm font-medium text-stone-500 mb-1">Guest Name</label>
                 <input 
-                  type="checkbox" 
-                  checked={newPlusOne}
-                  onChange={(e) => setNewPlusOne(e.target.checked)}
-                  className="w-6 h-6 md:w-5 md:h-5 rounded text-rose-500 border-stone-300 focus:ring-rose-400 focus:ring-offset-0 accent-rose-400"
+                  type="text" 
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g., Jane Doe"
+                  className="w-full px-4 py-3 md:py-2 bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 transition-colors"
+                  required
                 />
-                <span className="text-base md:text-sm font-medium text-stone-600">Has Plus One?</span>
-              </label>
+              </div>
+              <div className="w-full md:w-48">
+                <label className="block text-sm font-medium text-stone-500 mb-1">Category</label>
+                <select 
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  className="w-full px-4 py-3 md:py-2 bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 transition-colors"
+                >
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-full md:w-auto flex items-center h-[48px] md:h-[42px] px-2">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={newPlusOne}
+                    onChange={(e) => setNewPlusOne(e.target.checked)}
+                    className="w-6 h-6 md:w-5 md:h-5 rounded text-rose-500 border-stone-300 focus:ring-rose-400 focus:ring-offset-0 accent-rose-400"
+                  />
+                  <span className="text-base md:text-sm font-medium text-stone-600">Has Plus One?</span>
+                </label>
+              </div>
             </div>
-            <button 
-              type="submit"
-              disabled={!user}
-              className="w-full md:w-auto px-6 py-3 md:py-2 h-[48px] md:h-[42px] bg-stone-800 hover:bg-stone-900 disabled:bg-stone-400 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm"
-            >
-              Add to List
-            </button>
+
+            {/* Bottom Row: Address and Submit */}
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+               <div className="flex-1 w-full">
+                <label className="block text-sm font-medium text-stone-500 mb-1">Mailing Address (Optional)</label>
+                <input 
+                  type="text" 
+                  value={newAddress}
+                  onChange={(e) => setNewAddress(e.target.value)}
+                  placeholder="123 Wedding Lane, Nashville, TN 37201"
+                  className="w-full px-4 py-3 md:py-2 bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400 transition-colors"
+                />
+              </div>
+              <button 
+                type="submit"
+                disabled={!user}
+                className="w-full md:w-auto px-8 py-3 md:py-2 h-[48px] md:h-[42px] bg-stone-800 hover:bg-stone-900 disabled:bg-stone-400 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm"
+              >
+                Add to List
+              </button>
+            </div>
           </form>
         </div>
 
@@ -316,7 +351,7 @@ export default function App() {
                   {categoryGuests.map(guest => (
                     <div key={guest.id} className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-stone-50/50 transition-colors">
                       
-                      {/* Name and Plus One Status */}
+                      {/* Name, Address, and Plus One Status */}
                       <div className="flex-1 w-full sm:w-auto">
                         <div className="flex items-center gap-3 flex-wrap">
                           <p className="font-medium text-stone-900 text-lg break-words">{guest.name}</p>
@@ -326,6 +361,13 @@ export default function App() {
                             </span>
                           )}
                         </div>
+                        {/* NEW: DISPLAY ADDRESS */}
+                        {guest.address && (
+                          <div className="flex items-start gap-1.5 mt-1.5 text-stone-500">
+                            <MapPin size={14} className="mt-0.5 shrink-0 text-stone-400" />
+                            <p className="text-sm whitespace-pre-wrap leading-tight">{guest.address}</p>
+                          </div>
+                        )}
                       </div>
 
                       {/* Controls */}
